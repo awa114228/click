@@ -71,11 +71,13 @@
 
         let userCountry = ""; 
         let isReady = false;
-        let detectionFinished = false;
+        
+        // 建立 AbortController 用於停止連線
+        const controller = new AbortController();
+        const signal = controller.signal;
 
         const messages = ["讚啦！", "點得好", "很有感", "再來一次", "非常有勁", "這下帥了", "感謝點擊", "厲害喔", "真不簡單", "棒極了"];
         
-        // 擴充更多的顏色組合
         const themes = [
             { bg: '#f8fafc', btn: 'bg-slate-700' },     // 石板
             { bg: '#eff6ff', btn: 'bg-blue-600' },      // 藍色
@@ -105,53 +107,47 @@
             }
         }
 
-        // 2. 獲取使用者地理位置（加入 2 秒超時限制）
+        // 2. 獲取使用者地理位置（嚴格 2 秒停止偵測）
         async function fetchLocation() {
-            const timeoutPromise = new Promise((resolve) => {
-                setTimeout(() => {
-                    if (!detectionFinished) {
-                        console.log("偵測超時，改為位置未知");
-                        resolve({ timeout: true });
-                    }
-                }, 2000);
-            });
+            let timeoutId = setTimeout(() => {
+                console.log("偵測超時，停止所有 API 請求並設為未知");
+                controller.abort(); // 停止所有 fetch 請求
+                if (!userCountry) {
+                    userCountry = "位置未知";
+                    enableButton();
+                }
+            }, 2000);
 
             const apis = [
                 'https://ipapi.co/json/',
                 'https://ip-api.com/json/'
             ];
 
-            const fetchPromises = apis.map(async (api) => {
-                try {
-                    const res = await fetch(api);
-                    const data = await res.json();
-                    return data.country_name || data.country;
-                } catch (e) {
-                    return null;
-                }
-            });
-
             try {
-                const result = await Promise.race([
-                    (async () => {
-                        for (let p of fetchPromises) {
-                            const name = await p;
-                            if (name) return name;
+                // 依序嘗試 API，傳入 signal 以便隨時停止
+                for (let api of apis) {
+                    if (signal.aborted) break;
+                    try {
+                        const res = await fetch(api, { signal });
+                        const data = await res.json();
+                        const name = data.country_name || data.country;
+                        if (name) {
+                            userCountry = name;
+                            clearTimeout(timeoutId);
+                            enableButton();
+                            return;
                         }
-                        return null;
-                    })(),
-                    timeoutPromise
-                ]);
-
-                if (result && typeof result === 'string') {
-                    userCountry = result;
-                } else {
-                    userCountry = "位置未知";
+                    } catch (e) {
+                        if (e.name === 'AbortError') return; // 已被強行停止
+                        console.warn(`API ${api} 失敗，嘗試下一個`);
+                    }
                 }
             } catch (e) {
+                // 捕捉不可預期的錯誤
+            }
+
+            if (!userCountry) {
                 userCountry = "位置未知";
-            } finally {
-                detectionFinished = true;
                 enableButton();
             }
         }
