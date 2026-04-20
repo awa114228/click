@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>全球點擊排行榜</title>
+    <title>隨機色彩按鈕</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
@@ -18,16 +18,6 @@
             font-family: system-ui, -apple-system, sans-serif;
             padding: 20px;
         }
-        .leaderboard-container {
-            margin-top: 40px;
-            width: 100%;
-            max-width: 400px;
-            background: rgba(255, 255, 255, 0.8);
-            backdrop-filter: blur(10px);
-            border-radius: 1rem;
-            padding: 1.5rem;
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-        }
     </style>
 </head>
 <body>
@@ -36,45 +26,15 @@
     <div class="flex-grow flex items-center justify-center">
         <button 
             id="mainButton"
-            disabled
-            class="relative px-10 py-5 bg-slate-400 text-white text-xl font-bold rounded-xl shadow-md cursor-not-allowed transition-all duration-150 select-none min-w-[200px]"
+            class="relative px-10 py-5 bg-slate-700 text-white text-xl font-bold rounded-xl shadow-md active:shadow-inner active:translate-y-0.5 transition-all duration-150 select-none min-w-[200px] cursor-pointer"
         >
-            偵測位置中...
+            請點擊
         </button>
     </div>
 
-    <!-- 排行榜區塊 -->
-    <div class="leaderboard-container">
-        <h2 class="text-xl font-bold text-slate-800 mb-4">
-            全球排行榜
-        </h2>
-        <div id="leaderboardList" class="space-y-2">
-            <div class="text-center text-slate-400 py-4">讀取排行榜數據...</div>
-        </div>
-    </div>
-
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, updateDoc, increment, collection, query, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Firebase 設定
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'click-game-v1';
-
         const btn = document.getElementById('mainButton');
         const body = document.body;
-        const leaderboardList = document.getElementById('leaderboardList');
-
-        let userCountry = ""; 
-        let isReady = false;
-        
-        // 建立 AbortController 用於停止連線
-        const controller = new AbortController();
-        const signal = controller.signal;
 
         const messages = ["讚啦！", "點得好", "很有感", "再來一次", "非常有勁", "這下帥了", "感謝點擊", "厲害喔", "真不簡單", "棒極了"];
         
@@ -94,143 +54,17 @@
             { bg: '#f7fee7', btn: 'bg-lime-600' }       // 萊姆綠
         ];
 
-        // 1. 初始化身份驗證
-        async function initAuth() {
-            try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-            } catch (e) {
-                console.error("Auth Error", e);
-            }
-        }
-
-        // 2. 獲取使用者地理位置（嚴格 2 秒停止偵測）
-        async function fetchLocation() {
-            let timeoutId = setTimeout(() => {
-                console.log("偵測超時，停止所有 API 請求並設為未知");
-                controller.abort(); // 停止所有 fetch 請求
-                if (!userCountry) {
-                    userCountry = "位置未知";
-                    enableButton();
-                }
-            }, 2000);
-
-            const apis = [
-                'https://ipapi.co/json/',
-                'https://ip-api.com/json/'
-            ];
-
-            try {
-                // 依序嘗試 API，傳入 signal 以便隨時停止
-                for (let api of apis) {
-                    if (signal.aborted) break;
-                    try {
-                        const res = await fetch(api, { signal });
-                        const data = await res.json();
-                        const name = data.country_name || data.country;
-                        if (name) {
-                            userCountry = name;
-                            clearTimeout(timeoutId);
-                            enableButton();
-                            return;
-                        }
-                    } catch (e) {
-                        if (e.name === 'AbortError') return; // 已被強行停止
-                        console.warn(`API ${api} 失敗，嘗試下一個`);
-                    }
-                }
-            } catch (e) {
-                // 捕捉不可預期的錯誤
-            }
-
-            if (!userCountry) {
-                userCountry = "位置未知";
-                enableButton();
-            }
-        }
-
-        function enableButton() {
-            isReady = true;
-            btn.disabled = false;
-            btn.textContent = "請點擊";
-            btn.className = "relative px-10 py-5 bg-slate-700 text-white text-xl font-bold rounded-xl shadow-md active:shadow-inner active:translate-y-0.5 transition-all duration-150 select-none min-w-[200px] cursor-pointer";
-        }
-
-        // 3. 監聽排行榜更新
-        function setupLeaderboard(user) {
-            if (!user) return;
-            const statsCol = collection(db, 'artifacts', appId, 'public', 'data', 'countryStats');
-            
-            onSnapshot(statsCol, (snapshot) => {
-                const data = [];
-                snapshot.forEach(doc => {
-                    const d = doc.data();
-                    if (doc.id !== "Unknown" && doc.id !== "undefined" && doc.id !== "位置未知" && doc.id !== "網路守護者") {
-                        data.push({ id: doc.id, clicks: d.clicks || 0 });
-                    }
-                });
-
-                data.sort((a, b) => b.clicks - a.clicks);
-                renderLeaderboard(data);
-            }, (error) => console.error("Firestore Error:", error));
-        }
-
-        function renderLeaderboard(data) {
-            leaderboardList.innerHTML = '';
-            if (data.length === 0) {
-                leaderboardList.innerHTML = '<div class="text-center text-slate-400 py-4">尚無點擊紀錄</div>';
-                return;
-            }
-
-            data.slice(0, 10).forEach((item, index) => {
-                const row = document.createElement('div');
-                row.className = "flex justify-between items-center p-2 rounded hover:bg-white transition-colors";
-                row.innerHTML = `
-                    <div class="flex items-center">
-                        <span class="w-6 text-slate-400 font-mono">${index + 1}.</span>
-                        <span class="font-medium text-slate-700">${item.id}</span>
-                    </div>
-                    <span class="font-bold text-indigo-600">${item.clicks.toLocaleString()}</span>
-                `;
-                leaderboardList.appendChild(row);
-            });
-        }
-
-        // 4. 點擊處理
-        btn.addEventListener('click', async () => {
-            if (!auth.currentUser || !isReady) return;
-
+        // 點擊處理：僅保留視覺效果
+        btn.addEventListener('click', () => {
             const theme = themes[Math.floor(Math.random() * themes.length)];
             const message = messages[Math.floor(Math.random() * messages.length)];
-            body.style.backgroundColor = theme.bg;
-            btn.textContent = message;
-            btn.className = `relative px-10 py-5 text-white text-xl font-bold rounded-xl shadow-md active:shadow-inner active:translate-y-0.5 transition-all duration-150 select-none min-w-[200px] ${theme.btn}`;
-
-            if (userCountry === "位置未知" || !userCountry) {
-                return;
-            }
-
-            const countryDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'countryStats', userCountry);
             
-            try {
-                const docSnap = await getDoc(countryDocRef);
-                if (docSnap.exists()) {
-                    await updateDoc(countryDocRef, { clicks: increment(1) });
-                } else {
-                    await setDoc(countryDocRef, { clicks: 1 });
-                }
-            } catch (e) {
-                console.error("更新失敗:", e);
-            }
-        });
-
-        initAuth();
-        fetchLocation();
-        onAuthStateChanged(auth, (user) => {
-            if (user) setupLeaderboard(user);
+            // 更新背景顏色
+            body.style.backgroundColor = theme.bg;
+            
+            // 更新按鈕文字與顏色
+            btn.textContent = message;
+            btn.className = `relative px-10 py-5 text-white text-xl font-bold rounded-xl shadow-md active:shadow-inner active:translate-y-0.5 transition-all duration-150 select-none min-w-[200px] cursor-pointer ${theme.btn}`;
         });
 
     </script>
