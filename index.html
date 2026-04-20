@@ -71,14 +71,25 @@
 
         let userCountry = ""; 
         let isReady = false;
+        let detectionFinished = false;
 
-        const messages = ["讚啦！", "點得好", "很有感", "再來一次", "非常有勁", "這下帥了", "感謝點擊", "厲害喔"];
+        const messages = ["讚啦！", "點得好", "很有感", "再來一次", "非常有勁", "這下帥了", "感謝點擊", "厲害喔", "真不簡單", "棒極了"];
+        
+        // 擴充更多的顏色組合
         const themes = [
-            { bg: '#f8fafc', btn: 'bg-slate-700' },
-            { bg: '#f1f5f9', btn: 'bg-blue-700' },
-            { bg: '#f0fdf4', btn: 'bg-emerald-700' },
-            { bg: '#fafaf9', btn: 'bg-stone-700' },
-            { bg: '#f5f3ff', btn: 'bg-indigo-700' }
+            { bg: '#f8fafc', btn: 'bg-slate-700' },     // 石板
+            { bg: '#eff6ff', btn: 'bg-blue-600' },      // 藍色
+            { bg: '#f0fdf4', btn: 'bg-emerald-600' },   // 祖母綠
+            { bg: '#fafaf9', btn: 'bg-stone-700' },     // 石頭
+            { bg: '#f5f3ff', btn: 'bg-indigo-600' },    // 靛藍
+            { bg: '#fff7ed', btn: 'bg-orange-600' },    // 橘色
+            { bg: '#fff1f2', btn: 'bg-rose-600' },      // 玫瑰紅
+            { bg: '#fdf4ff', btn: 'bg-fuchsia-600' },   // 紫紅
+            { bg: '#ecfeff', btn: 'bg-cyan-600' },      // 青色
+            { bg: '#fffbeb', btn: 'bg-amber-600' },     // 琥珀
+            { bg: '#faf5ff', btn: 'bg-purple-600' },    // 紫色
+            { bg: '#fdf2f8', btn: 'bg-pink-600' },      // 粉紅
+            { bg: '#f7fee7', btn: 'bg-lime-600' }       // 萊姆綠
         ];
 
         // 1. 初始化身份驗證
@@ -94,30 +105,55 @@
             }
         }
 
-        // 2. 獲取使用者地理位置
+        // 2. 獲取使用者地理位置（加入 2 秒超時限制）
         async function fetchLocation() {
+            const timeoutPromise = new Promise((resolve) => {
+                setTimeout(() => {
+                    if (!detectionFinished) {
+                        console.log("偵測超時，改為位置未知");
+                        resolve({ timeout: true });
+                    }
+                }, 2000);
+            });
+
             const apis = [
                 'https://ipapi.co/json/',
                 'https://ip-api.com/json/'
             ];
 
-            for (let api of apis) {
+            const fetchPromises = apis.map(async (api) => {
                 try {
                     const res = await fetch(api);
                     const data = await res.json();
-                    const name = data.country_name || data.country;
-                    if (name) {
-                        userCountry = name;
-                        enableButton();
-                        return;
-                    }
+                    return data.country_name || data.country;
                 } catch (e) {
-                    console.warn(`API ${api} failed, trying next...`);
+                    return null;
                 }
+            });
+
+            try {
+                const result = await Promise.race([
+                    (async () => {
+                        for (let p of fetchPromises) {
+                            const name = await p;
+                            if (name) return name;
+                        }
+                        return null;
+                    })(),
+                    timeoutPromise
+                ]);
+
+                if (result && typeof result === 'string') {
+                    userCountry = result;
+                } else {
+                    userCountry = "位置未知";
+                }
+            } catch (e) {
+                userCountry = "位置未知";
+            } finally {
+                detectionFinished = true;
+                enableButton();
             }
-            
-            userCountry = "位置未知";
-            enableButton();
         }
 
         function enableButton() {
@@ -136,8 +172,7 @@
                 const data = [];
                 snapshot.forEach(doc => {
                     const d = doc.data();
-                    // 過濾無效資料與「位置未知」
-                    if (doc.id !== "Unknown" && doc.id !== "undefined" && doc.id !== "位置未知") {
+                    if (doc.id !== "Unknown" && doc.id !== "undefined" && doc.id !== "位置未知" && doc.id !== "網路守護者") {
                         data.push({ id: doc.id, clicks: d.clicks || 0 });
                     }
                 });
@@ -172,14 +207,12 @@
         btn.addEventListener('click', async () => {
             if (!auth.currentUser || !isReady) return;
 
-            // 視覺反應（無論是否有位置都會發生）
             const theme = themes[Math.floor(Math.random() * themes.length)];
             const message = messages[Math.floor(Math.random() * messages.length)];
             body.style.backgroundColor = theme.bg;
             btn.textContent = message;
             btn.className = `relative px-10 py-5 text-white text-xl font-bold rounded-xl shadow-md active:shadow-inner active:translate-y-0.5 transition-all duration-150 select-none min-w-[200px] ${theme.btn}`;
 
-            // 若位置未知，則不執行資料庫寫入
             if (userCountry === "位置未知" || !userCountry) {
                 return;
             }
