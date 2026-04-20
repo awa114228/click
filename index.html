@@ -22,6 +22,12 @@
 </head>
 <body>
 
+    <!-- 點擊次數顯示 (左上角) -->
+    <div class="fixed top-6 left-6 flex flex-col pointer-events-none">
+        <span class="text-slate-400 text-xs uppercase tracking-widest font-bold">Total Clicks</span>
+        <span id="clickCount" class="text-slate-800 text-4xl font-black tabular-nums">0</span>
+    </div>
+
     <!-- 核心按鈕 -->
     <div class="flex-grow flex items-center justify-center">
         <button 
@@ -35,6 +41,9 @@
     <script type="module">
         const btn = document.getElementById('mainButton');
         const body = document.body;
+        const countDisplay = document.getElementById('clickCount');
+
+        let count = 0;
 
         const messages = ["讚啦！", "點得好", "很有感", "再來一次", "非常有勁", "這下帥了", "感謝點擊", "厲害喔", "真不簡單", "棒極了"];
         
@@ -54,8 +63,12 @@
             { bg: '#f7fee7', btn: 'bg-lime-600' }       // 萊姆綠
         ];
 
-        // 點擊處理：僅保留視覺效果
+        // 點擊處理
         btn.addEventListener('click', () => {
+            // 增加次數並更新顯示
+            count++;
+            countDisplay.textContent = count.toLocaleString();
+
             const theme = themes[Math.floor(Math.random() * themes.length)];
             const message = messages[Math.floor(Math.random() * messages.length)];
             
